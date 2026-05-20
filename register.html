@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Create Account - Edufunnel</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css">
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+</head>
+<body>
+  <div class="register-bg">
+    <img src="../images/Frame 73.png" alt="" />
+  </div>
+
+  <div class="register-container">
+    <div class="register-brand">
+      <h1>Edufunnel</h1>
+      <span>Analytical Intelligence</span>
+    </div>
+
+    <a href="index.html" class="back-link">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M19 12H5M12 19l-7-7 7-7"/>
+      </svg>
+      Back
+    </a>
+
+        <div class="register-form-wrapper">
+          <div class="auth-form-header">
+            <h2>Create Account</h2>
+            <p>Join Edufunnel to start managing your data with precision.</p>
+          </div>
+          
+          <form id="registerForm" action="dashboard.html">
+            <div class="form-group">
+              <label for="fullName">Full Name</label>
+              <input type="text" id="fullName" placeholder="John Doe" required>
+            </div>
+            
+            <div class="form-group">
+              <label for="email">Email Address</label>
+              <input type="email" id="email" placeholder="name@company.com" required>
+            </div>
+            
+            <div class="form-group">
+                <label for="password">Password</label>
+                <div class="password-input">
+                  <input type="password" id="password" placeholder="••••••••" required>
+                  <button type="button" class="password-toggle">
+                    </button>
+                </div>
+              </div> <div class="form-group">
+                <label for="confirmPassword">Confirm Password</label>
+                <div class="password-input">
+                  <input type="password" id="confirmPassword" placeholder="••••••••" required>
+                  <button type="button" class="password-toggle">
+                    </button>
+                </div>
+              </div>
+            
+            <div class="terms-checkbox">
+              <div class="checkbox-group">
+                <input type="checkbox" id="terms" required>
+                <label for="terms">I agree to the <a href="#">Terms and Conditions</a> and <a href="#">Privacy Policy</a>.</label>
+              </div>
+            </div>
+            
+            <button type="submit" class="btn-primary">Create Account</button>
+          </form>
+          
+          <p class="auth-footer">
+            Already have an account? <a href="index.html">Sign In</a>
+          </p>
+        </div>
+        
+        </div>
+      </div>
+    </div>
+  </div>
+  
+  <script src="regis.js"></script>
+</body>
+</html>

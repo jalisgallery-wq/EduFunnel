@@ -1,567 +1,314 @@
-// =============================================
-//  EduFunnel — app.js  (FIXED VERSION)
-//  Supabase tables:
-//    campaign_metrics  → id_performance, id_sumber, tahun, total_leads, jumlah_berhasil, jumlah_gagal
-//    funnel_details    → id_funnel, id_performance, tahap_1..tahap_5
-//  id_sumber: 1 = Google Ads, 2 = Instagram
-// =============================================
-
-const supabaseUrl = 'https://sciqhbmlhecpervewyld.supabase.co'
-const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNjaXFoYm1saGVjcGVydmV3eWxkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzcxMDQ3MDEsImV4cCI6MjA5MjY4MDcwMX0.7uLggDlAEiuZyU7pBX4DltH8iufWXEvUqcFVaK0907o'
-const _supabase = (typeof supabase !== 'undefined') ? supabase.createClient(supabaseUrl, supabaseKey) : null
-
-// =============================================
-//  HELPER: Normalisasi campaign_metrics
-//  (Supabase kadang return object, kadang array)
-// =============================================
-function getMetric(row) {
-    const m = row.campaign_metrics
-    if (!m) return null
-    // Jika array (one-to-many), ambil elemen pertama
-    if (Array.isArray(m)) return m.length > 0 ? m[0] : null
-    return m
+// guard login
+if (sessionStorage.getItem('loggedIn') !== 'true') {
+  window.location.href = 'index.html';
 }
 
-// =============================================
-//  CORE: Hitung pipeline dari data mentah
-// =============================================
+// deklarasi variabel global
+let jsonData = null;
+let conversionChart = null;
+let studentChart = null;
 
-/**
- * buildPipeline(funnel, metric)
- * funnel  → { tahap_1, tahap_2, tahap_3, tahap_4, tahap_5 }
- * metric  → { total_leads, jumlah_berhasil, jumlah_gagal }
- *
- * Rumus konversi:
- *   T1        = semua lead masuk (baseline 100%)
- *   conv T2   = tahap_2 / tahap_1  × 100
- *   conv T3   = tahap_3 / tahap_2  × 100
- *   conv T4   = tahap_4 / tahap_3  × 100
- *   yield T5  = tahap_5 / tahap_1  × 100  ← overall yield (berhasil)
- *   success   = jumlah_berhasil / total_leads × 100
- *   attrition = jumlah_gagal    / total_leads × 100
- *   retention = tahap_5         / total_leads × 100
- */
-function buildPipeline(funnel, metric) {
-    const t1 = funnel.tahap_1 || 0
-    const t2 = funnel.tahap_2 || 0
-    const t3 = funnel.tahap_3 || 0
-    const t4 = funnel.tahap_4 || 0
-    const t5 = funnel.tahap_5 || 0
+async function loadData() { // fungsi untuk mengambil data dari file json (ambil file data_funnel.json, simpan ke variabel jsonData, lalu panggil fungsi halaman yang sesuai.)
+  try { // pola penanganan error (try dan catch)
+    const response = await fetch('data_funnel.json'); // fetch untuk mengambil data_funnel.json
+    if (!response.ok) throw new Error('File tidak ditemukan');
+    jsonData = await response.json(); /// Mengubah teks JSON mentah menjadi objek JavaScript dan menyimpannya ke variabel global jsonData
 
-    const pct = (a, b) => b ? Math.round((a / b) * 100) : 0
-
-    const convT2  = pct(t2, t1)
-    const convT3  = pct(t3, t2)
-    const convT4  = pct(t4, t3)
-    const yieldT5 = pct(t5, t1)
-
-    const totalLeads    = metric.total_leads     || 0
-    const berhasil      = metric.jumlah_berhasil || 0
-    const gagal         = metric.jumlah_gagal    || 0
-    const successRate   = pct(berhasil, totalLeads)
-    const attritionRate = pct(gagal,    totalLeads)
-    const retentionRate = pct(t5,       totalLeads)
-
-    return {
-        total:         totalLeads,
-        retention:     retentionRate + '%',
-        success:       successRate + '%',
-        attrition:     attritionRate + '%',
-        yield:         yieldT5 + '%',
-        success_count: berhasil,
-        failure_count: gagal,
-        stages: [
-            { name: 'Conversion T1', count: t1, rate: '100%',              conv: 100    },
-            { name: 'Conversion T2', count: t2, rate: convT2  + '% CONV',  conv: convT2 },
-            { name: 'Conversion T3', count: t3, rate: convT3  + '% CONV',  conv: convT3 },
-            { name: 'Conversion T4', count: t4, rate: convT4  + '% CONV',  conv: convT4 },
-            { name: 'Conversion T5', count: t5, rate: yieldT5 + '% YIELD', conv: yieldT5 },
-        ]
+    const path = window.location.pathname.toLowerCase();
+    if (path.includes('dashboard')) {
+      initDashboard();
+    } else if (path.includes('traffic-sources')) {
+      initTrafficSources();
+    } else if (path.includes('annual-stages')) {
+      initAnnualStages();
     }
+  } catch (error) {
+    console.error('Error fetch:', error);
+    const main = document.querySelector('.page-content');
+    if (main) {
+      main.innerHTML = '<p style="color:#ef4444;padding:2rem;text-align:center;">Gagal memuat data. Pastikan file <strong>data_funnel.json</strong> sudah ada.</p>';
+    }
+  }
 }
 
-/**
- * mergeFunnels — gabungkan banyak baris menjadi 1 pipeline total
- * FIX: gunakan getMetric() agar aman dari null / array
- */
-function mergeFunnels(rows) {
-    const sumFunnel = { tahap_1: 0, tahap_2: 0, tahap_3: 0, tahap_4: 0, tahap_5: 0 }
-    const sumMetric = { total_leads: 0, jumlah_berhasil: 0, jumlah_gagal: 0 }
+// ============================================================
+// DASHBOARD
+// ============================================================
+function initDashboard() {
+  const s = jsonData.summary;
+  setText('stat-total-leads',    s.total_prospek);
+  setText('stat-retention-rate', s.rata_rata_probabilitas_konversi_persen + '%');
+  setText('stat-success-rate',   s.rata_rata_probabilitas_konversi_persen + '%');
+  setText('stat-failure-rate',   s.rata_rata_probabilitas_attrition_persen + '%');
 
-    rows.forEach(row => {
-        sumFunnel.tahap_1 += row.tahap_1 || 0
-        sumFunnel.tahap_2 += row.tahap_2 || 0
-        sumFunnel.tahap_3 += row.tahap_3 || 0
-        sumFunnel.tahap_4 += row.tahap_4 || 0
-        sumFunnel.tahap_5 += row.tahap_5 || 0
+  // hitung persentase leads tiap tahun dibanding tahun sebelumnya
+  const total2025 = getTotalLeads(2025); 
+  const total2026 = getTotalLeads(2026);
+  const pct = Math.round(((total2026 - total2025) / total2025) * 100); // rumus peresentase perubahan perbandingan tahun
+  setText('stat-total-change', (pct > 0 ? '+' : '') + pct + '%');
 
-        const m = getMetric(row)   // FIX: pakai helper, bukan row.campaign_metrics langsung
-        if (m) {
-            sumMetric.total_leads     += m.total_leads     || 0
-            sumMetric.jumlah_berhasil += m.jumlah_berhasil || 0
-            sumMetric.jumlah_gagal    += m.jumlah_gagal    || 0
-        }
-    })
-
-    return buildPipeline(sumFunnel, sumMetric)
+  // panggil fungsi render chart
+  renderConversionChart();
+  renderStudentGrowthChart();
 }
 
-// =============================================
-//  DASHBOARD PAGE
-// =============================================
+function renderConversionChart() {
+  const canvas = document.getElementById('conversionChart');
+  if (!canvas) return;
+  if (conversionChart) conversionChart.destroy();
 
-let conversionChartInstance = null
-
-async function loadDashboardData() {
-    if (!_supabase) return
-
-    // STEP 1: Fetch semua campaign_metrics
-    const { data: metrics, error: metricError } = await _supabase
-        .from('campaign_metrics')
-        .select('id_performance, id_sumber, tahun, total_leads, jumlah_berhasil, jumlah_gagal')
-        .order('tahun', { ascending: true })
-
-    if (metricError || !metrics?.length) {
-        console.warn('Dashboard: gagal fetch campaign_metrics', metricError)
-        return
-    }
-
-    // STEP 2: Fetch semua funnel_details (untuk hitung retention = tahap_5 / total_leads)
-    const { data: funnels, error: funnelError } = await _supabase
-        .from('funnel_details')
-        .select('id_performance, tahap_1, tahap_2, tahap_3, tahap_4, tahap_5')
-
-    if (funnelError || !funnels?.length) {
-        console.warn('Dashboard: gagal fetch funnel_details', funnelError)
-        return
-    }
-
-    // STEP 3: Agregasi semua sumber per tahun
-    const byYear = {}
-    metrics.forEach(m => {
-        if (!byYear[m.tahun]) byYear[m.tahun] = {
-            tahun: m.tahun,
-            jumlah_berhasil: 0,
-            jumlah_gagal: 0,
-            total_leads: 0,
-            tahap_5: 0
-        }
-        byYear[m.tahun].jumlah_berhasil += m.jumlah_berhasil || 0
-        byYear[m.tahun].jumlah_gagal    += m.jumlah_gagal    || 0
-        byYear[m.tahun].total_leads     += m.total_leads     || 0
-
-        // Cari funnel yang cocok dengan id_performance ini, tambahkan tahap_5-nya
-        const f = funnels.find(f => f.id_performance === m.id_performance)
-        if (f) byYear[m.tahun].tahap_5 += f.tahap_5 || 0
-    })
-
-    const grouped = Object.values(byYear).sort((a, b) => a.tahun - b.tahun)
-    const latest  = grouped[grouped.length - 1]
-    const previous = grouped[grouped.length - 2]
-
-    const pct = (a, b) => b ? Math.round((a / b) * 100) : 0
-    const retentionRate = pct(latest.tahap_5, latest.total_leads)
-    const successRate   = pct(latest.jumlah_berhasil, latest.total_leads)
-    const failureRate   = pct(latest.jumlah_gagal, latest.total_leads)
-    const totalGrowth   = previous?.total_leads
-        ? Math.round(((latest.total_leads - previous.total_leads) / previous.total_leads) * 100)
-        : null
-
-    const el = id => document.getElementById(id)
-    if (el('stat-total-leads'))   el('stat-total-leads').innerText   = Number(latest.total_leads).toLocaleString('id-ID')
-    if (el('stat-total-change')) {
-        el('stat-total-change').innerText = totalGrowth === null ? '' : (totalGrowth >= 0 ? '+' : '') + totalGrowth + '%'
-        el('stat-total-change').classList.toggle('negative', totalGrowth < 0)
-    }
-    if (el('stat-retention-rate')) el('stat-retention-rate').innerText = retentionRate + '%'
-    if (el('stat-success-rate'))  el('stat-success-rate').innerText  = successRate + '%'
-    if (el('stat-failure-rate'))  el('stat-failure-rate').innerText  = failureRate + '%'
-    if (el('insight-text'))       el('insight-text').innerText =
-        `Analysis shows ${latest.jumlah_gagal} failed leads out of ${latest.total_leads} total data, resulting in a ${failureRate}% Failure Rate. Optimization is required to improve the ${successRate}% Success Rate for the next period.`
-
-    renderConversionChart(grouped)
-}
-
-function renderConversionChart(data) {
-    const canvas = document.getElementById('conversionChart')
-    if (!canvas) return
-    if (conversionChartInstance) conversionChartInstance.destroy()
-
-    conversionChartInstance = new Chart(canvas.getContext('2d'), {
-        type: 'bar',
-        data: {
-            labels: data.map(d => d.tahun),
-            datasets: [
-                {
-                    label: 'Failure',
-                    data: data.map(d => Number(d.jumlah_gagal)),
-                    backgroundColor: 'rgba(239,68,68,0.7)',
-                    borderColor: 'rgba(239,68,68,1)',
-                    borderWidth: 1, borderRadius: 6
-                },
-                {
-                    label: 'Success',
-                    data: data.map(d => Number(d.jumlah_berhasil)),
-                    backgroundColor: '#2b7de9',
-                    borderColor: '#2b7de9',
-                    borderWidth: 1, borderRadius: 6
-                }
-            ]
+  // FIX 1: grouped - batang berdampingan
+  conversionChart = new Chart(canvas, {
+    type: 'bar',
+    data: {
+      labels: ['2024', '2025', '2026'],
+      datasets: [
+        {
+          label: 'Failure',
+          data: [2024, 2025, 2026].map(y => getTotalLeads(y) - getTotalBerkuliah(y)),
+          backgroundColor: '#fd6a6a',
+          borderRadius: 4
         },
-        options: {
-            responsive: true,
-            maintainAspectRatio: true,
-            plugins: {
-                legend: { display: false },
-                tooltip: { callbacks: { label: c => ` ${c.dataset.label}: ${c.parsed.y} leads` } }
-            },
-            scales: {
-                x: { grid: { display: false } },
-                y: { beginAtZero: true, grid: { color: 'rgba(0,0,0,0.05)' } }
-            }
+        {
+          label: 'Success',
+          data: [2024, 2025, 2026].map(y => getTotalBerkuliah(y)),
+          backgroundColor: '#6b69ea',
+          borderRadius: 4
         }
-    })
+      ]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: { legend: { display: false } },
+      scales: {
+        x: { stacked: false, grid: { display: false } },
+        y: { stacked: false, beginAtZero: true }
+      }
+    }
+  });
 }
 
-// Student Growth chart (statis)
-const ctxGrowth = document.getElementById('studentGrowthChart')
-if (ctxGrowth) {
-    new Chart(ctxGrowth, {
-        type: 'line',
-        data: {
-            labels: ['2024', '2025', '2026'],
-            datasets: [{
-                data: [50, 61, 93],
-                borderColor: '#2b7de9',
-                backgroundColor: 'transparent',
-                pointBackgroundColor: '#2b7de9',
-                pointRadius: 5,
-                tension: 0,
-            }]
-        },
-        options: {
-            plugins: { legend: { display: false } },
-            scales: {
-                y: { grid: { color: '#f1f5f9' }, ticks: { color: '#94a3b8' } },
-                x: { grid: { display: false },   ticks: { color: '#94a3b8' } }
-            }
-        }
-    })
+function renderStudentGrowthChart() {
+  const canvas = document.getElementById('studentGrowthChart');
+  if (!canvas) return;
+  if (studentChart) studentChart.destroy();
+  studentChart = new Chart(canvas, {
+    type: 'line',
+    data: {
+      labels: ['2024', '2025', '2026'],
+      datasets: [{
+        label: 'Berkuliah',
+        data: [2024, 2025, 2026].map(y => getTotalBerkuliah(y)),
+        borderColor: '#6366f1',
+        backgroundColor: 'rgba(99,102,241,0.1)',
+        borderWidth: 2,
+        pointRadius: 5,
+        fill: true,
+        tension: 0.3
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: { legend: { display: false } },
+      scales: {
+        x: { grid: { display: false } },
+        y: { beginAtZero: true }
+      }
+    }
+  });
 }
 
-if (document.getElementById('stat-total-leads')) loadDashboardData()
+// ============================================================
+// TRAFFIC SOURCES
+// ============================================================
+function initTrafficSources() {
+  showTotalTraffic2026();
 
-// =============================================
-//  TRAFFIC SOURCES PAGE
-// =============================================
-
-/**
- * Render pipeline ke elemen DOM dengan prefix id (misal 'ts-')
- */
-function renderPipelineToDOM(prefix, pipeline) {
-    const el = id => document.getElementById(id)
-    if (el(`${prefix}total`))     el(`${prefix}total`).textContent     = pipeline.total
-    if (el(`${prefix}retention`)) el(`${prefix}retention`).textContent = pipeline.retention
-    if (el(`${prefix}success`))   el(`${prefix}success`).textContent   = pipeline.success
-    if (el(`${prefix}attrition`)) el(`${prefix}attrition`).textContent = pipeline.attrition
-    if (el(`${prefix}yield`))     el(`${prefix}yield`).textContent     = pipeline.yield
-    pipeline.stages.forEach((s, i) => {
-        if (el(`${prefix}s${i+1}-count`)) el(`${prefix}s${i+1}-count`).textContent = s.count
-        if (el(`${prefix}s${i+1}-rate`))  el(`${prefix}s${i+1}-rate`).textContent  = s.rate
-    })
+  const filter = document.getElementById('tsFilter');
+  if (filter) {
+    filter.addEventListener('change', function () {
+      if (this.value === '') {
+        showTotalTraffic2026();
+      } else {
+        updateTraffic(this.value);
+      }
+    });
+  }
 }
 
-/**
- * loadTrafficSources(idSumber)
- * idSumber: null = semua sumber, 1 = Google Ads, 2 = Instagram
- *
- * FIX: Fetch campaign_metrics dulu (dengan filter id_sumber jika perlu),
- *      lalu fetch funnel_details berdasarkan id_performance yang cocok.
- *      Ini menghindari bug nested filter Supabase yang tidak reliable.
- */
-async function loadTrafficSources(idSumber = null) {
-    if (!_supabase) return
+function showTotalTraffic2026() { // 2026 seluruhnya
+  const rows = jsonData.funnel_data.filter(d => d.tahun === 2026);
+  const totalP = rows.reduce((s, d) => s + d.prospek, 0); // totalP = total prospek 
+  const totalB = rows.reduce((s, d) => s + d.berkuliah, 0); // totalB = total berkuliah
+  const ret    = Math.round((totalB / totalP) * 100); // rumus persentase retention 
 
-    // STEP 1: Fetch campaign_metrics (filter tahun 2026, dan sumber jika dipilih)
-    let metricQuery = _supabase
-        .from('campaign_metrics')
-        .select('id_performance, id_sumber, tahun, total_leads, jumlah_berhasil, jumlah_gagal')
-        .eq('tahun', 2026)
+  setText('ts-total',     totalP);
+  setText('ts-retention', ret + '%');
+  setText('ts-success',   ret + '%');
+  setText('ts-attrition', (100 - ret) + '%'); // rumus persentase attrition
+  setText('ts-pct',       '100%');
 
-    if (idSumber !== null) {
-        metricQuery = metricQuery.eq('id_sumber', idSumber)
-    }
+// hitung pipeline
+  const keys = ['web_visitor', 'ingin_mendaftar', 'lakukan_test', 'daftar_ulang', 'berkuliah'];
+  const totals = keys.map(k => rows.reduce((s, d) => s + d.detail_tahap[k], 0));
+  const yieldPct = Math.round((totals[4] / totals[0]) * 100);
 
-    const { data: metrics, error: metricError } = await metricQuery
-    if (metricError || !metrics?.length) {
-        console.warn('Traffic Sources: gagal fetch campaign_metrics', metricError)
-        return
-    }
-
-    // STEP 2: Ambil semua id_performance yang cocok
-    const ids = metrics.map(m => m.id_performance)
-
-    // STEP 3: Fetch funnel_details berdasarkan id_performance (pastikan id_performance ikut di-select)
-    const { data: funnels, error: funnelError } = await _supabase
-        .from('funnel_details')
-        .select('id_performance, tahap_1, tahap_2, tahap_3, tahap_4, tahap_5')
-        .in('id_performance', ids)
-
-    if (funnelError || !funnels?.length) {
-        console.warn('Traffic Sources: gagal fetch funnel_details', funnelError)
-        return
-    }
-
-    // STEP 4: Join manual — pasangkan setiap funnel dengan metric-nya
-    const joined = funnels.map(f => {
-        const m = metrics.find(m => m.id_performance === f.id_performance)
-        return { ...f, campaign_metrics: m || null }
-    }).filter(r => r.campaign_metrics !== null)
-
-    if (!joined.length) return
-
-    // STEP 5: Build pipeline (gabungkan jika lebih dari 1 baris)
-    const pipeline = joined.length === 1
-        ? buildPipeline(joined[0], joined[0].campaign_metrics)
-        : mergeFunnels(joined)
-
-    renderPipelineToDOM('ts-', pipeline)
+  setText('ts-yield',    yieldPct + '%');
+  setText('ts-s1-count', totals[0]);
+  setText('ts-s1-rate',  '100%');
+  for (let i = 1; i <= 4; i++) { // loop untuk menghitung konversi tiap tahun
+    const conv = Math.round((totals[i] / totals[i - 1]) * 100); // total sekarang dibagi total sebelumnya, dikali 100
+    setText('ts-s' + (i + 1) + '-count', totals[i]);
+    setText('ts-s' + (i + 1) + '-rate',  i < 4 ? conv + '% CONV' : yieldPct + '% YIELD');
+  }
 }
 
-const tsFilterEl = document.getElementById('tsFilter')
-if (tsFilterEl) {
-    loadTrafficSources(null)  // load semua sumber saat halaman pertama dibuka
+function updateTraffic(val) { // untuk sumber traffic terntu (GA or IG)
+  const map = { 'google-ads': 'Google Ads', 'instagram': 'Instagram' }; // dropdown sumber trafik
+  const sumber = map[val];
+  if (!sumber) return;
 
-    tsFilterEl.addEventListener('change', function () {
-        if      (this.value === 'google-ads') loadTrafficSources(1)
-        else if (this.value === 'instagram')  loadTrafficSources(2)
-        else                                  loadTrafficSources(null)
-    })
+  const row = jsonData.funnel_data.find(d => d.tahun === 2026 && d.sumber_trafik === sumber);
+  if (!row) return;
+
+  setText('ts-total',     row.prospek);
+  setText('ts-retention', row.konversi + '%');
+  setText('ts-success',   row.konversi + '%');
+  setText('ts-attrition', row.attrition + '%');
+
+  const kontribusi = Math.round((row.prospek / getTotalLeads(2026)) * 100); // ngitung kontribusi/porsi sumber trafik yang dipilih dari total keseluruhan 2026
+  setText('ts-pct', kontribusi + '%');
+
+  const d = row.detail_tahap;
+  const stages = [d.web_visitor, d.ingin_mendaftar, d.lakukan_test, d.daftar_ulang, d.berkuliah];
+  const yieldPct = Math.round((stages[4] / stages[0]) * 100); // rumus persentase yeild 
+
+  setText('ts-yield',    yieldPct + '%');
+  setText('ts-s1-count', stages[0]);
+  setText('ts-s1-rate',  '100%');
+  for (let i = 1; i <= 4; i++) {
+    const conv = Math.round((stages[i] / stages[i - 1]) * 100);
+    setText('ts-s' + (i + 1) + '-count', stages[i]);
+    setText('ts-s' + (i + 1) + '-rate',  i < 4 ? conv + '% CONV' : yieldPct + '% YIELD');
+  }
 }
 
-// =============================================
-//  ANNUAL STAGES PAGE
-// =============================================
+// ============================================================
+// ANNUAL STAGES
+// FIX 3: slider span tab klik
+// ============================================================
+const YEARS = [2024, 2025, 2026];
 
-let annualChartInstance  = null
-let currentYearIndex     = 0
-let annualDataFromDB     = {}
+function initAnnualStages() {
+  const yearList = document.getElementById('yearList');
+  if (!yearList) return;
 
-/**
- * loadAnnualStages
- * FIX: Fetch 2 tabel terpisah lalu join manual,
- *      sama seperti fix di Traffic Sources.
- */
-async function loadAnnualStages() {
-    if (!_supabase) {
-        initAnnualFallback(); return
-    }
+  // Sembunyikan tombol panah
+  const prev = document.getElementById('prevYearBtn');
+  const next = document.getElementById('nextYearBtn');
+  if (prev) prev.style.display = 'none';
+  if (next) next.style.display = 'none';
 
-    // STEP 1: Fetch semua campaign_metrics
-    const { data: metrics, error: metricError } = await _supabase
-        .from('campaign_metrics')
-        .select('id_performance, id_sumber, tahun, total_leads, jumlah_berhasil, jumlah_gagal')
-        .order('tahun', { ascending: true })
+  // Buat tab tahun pakai span
+  yearList.innerHTML = '';
+  YEARS.forEach((yr, i) => {
+    const span = document.createElement('span');
+    span.textContent = yr;
+    span.style.cssText = `
+      padding: 6px 20px;
+      cursor: pointer;
+      font-size: 15px;
+      font-weight: 500;
+      color: ${i === 2 ? '#fff' : '#888'};
+      background: ${i === 2 ? '#185FA5' : 'transparent'};
+      border-radius: 20px;
+      transition: all 0.2s;
+    `;
+    span.onclick = () => {
+      // Reset semua span
+      yearList.querySelectorAll('span').forEach(s => {
+        s.style.color = '#888';
+        s.style.background = 'transparent';
+      });
+      // Aktifkan yang diklik
+      span.style.color = '#fff';
+      span.style.background = '#185FA5';
+      updateAnnual(yr);
+    };
+    yearList.appendChild(span);
+  });
 
-    if (metricError || !metrics?.length) {
-        console.warn('Annual Stages: gagal fetch campaign_metrics', metricError)
-        initAnnualFallback(); return
-    }
-
-    // STEP 2: Fetch semua funnel_details (pastikan id_performance ikut di-select)
-    const { data: funnels, error: funnelError } = await _supabase
-        .from('funnel_details')
-        .select('id_performance, tahap_1, tahap_2, tahap_3, tahap_4, tahap_5')
-
-    if (funnelError || !funnels?.length) {
-        console.warn('Annual Stages: gagal fetch funnel_details', funnelError)
-        initAnnualFallback(); return
-    }
-
-    // STEP 3: Join manual
-    const joined = funnels.map(f => {
-        const m = metrics.find(m => m.id_performance === f.id_performance)
-        return { ...f, campaign_metrics: m || null }
-    }).filter(r => r.campaign_metrics !== null)
-
-    if (!joined.length) { initAnnualFallback(); return }
-
-    // STEP 4: Kelompokkan per tahun (gabungkan semua sumber)
-    const byYear = {}
-    joined.forEach(row => {
-        const tahun = row.campaign_metrics?.tahun
-        if (!tahun) return
-        if (!byYear[tahun]) byYear[tahun] = []
-        byYear[tahun].push(row)
-    })
-
-    const years = Object.keys(byYear).map(Number).sort()
-    annualDataFromDB = {}
-
-    years.forEach((tahun, idx) => {
-        const rows     = byYear[tahun]
-        const pipeline = rows.length === 1
-            ? buildPipeline(rows[0], rows[0].campaign_metrics)
-            : mergeFunnels(rows)
-
-        // Hitung % perubahan total leads vs tahun sebelumnya
-        let pct = ''
-        if (idx > 0) {
-            const prevTotal = annualDataFromDB[years[idx - 1]]?.total || 0
-            if (prevTotal) {
-                const change = Math.round(((pipeline.total - prevTotal) / prevTotal) * 100)
-                pct = (change >= 0 ? '+' : '') + change + '%'
-            }
-        }
-
-        annualDataFromDB[tahun] = { ...pipeline, pct }
-    })
-
-    window._annualYears = years
-    currentYearIndex    = years.length - 1   // default: tahun terbaru
-    refreshAnnual()
+  updateAnnual(2026);
 }
 
-function initAnnualFallback() {
-    annualDataFromDB = {
-        2024: { total: 160, pct: '',      retention: '31%', success: '31%', attrition: '69%', yield: '31%', success_count: 50, failure_count: 110,
-            stages: [{ name:'Conversion T1',count:160,rate:'100%',conv:100},{ name:'Conversion T2',count:120,rate:'75% CONV',conv:75},{ name:'Conversion T3',count:90,rate:'75% CONV',conv:75},{ name:'Conversion T4',count:75,rate:'83% CONV',conv:83},{ name:'Conversion T5',count:50,rate:'31% YIELD',conv:31}]},
-        2025: { total: 200, pct: '+25%',  retention: '30%', success: '30%', attrition: '70%', yield: '30%', success_count: 61, failure_count: 139,
-            stages: [{ name:'Conversion T1',count:200,rate:'100%',conv:100},{ name:'Conversion T2',count:154,rate:'77% CONV',conv:77},{ name:'Conversion T3',count:116,rate:'75% CONV',conv:75},{ name:'Conversion T4',count:92, rate:'79% CONV',conv:79},{ name:'Conversion T5',count:61, rate:'31% YIELD',conv:31}]},
-        2026: { total: 380, pct: '+90%',  retention: '24%', success: '24%', attrition: '76%', yield: '24%', success_count: 93, failure_count: 287,
-            stages: [{ name:'Conversion T1',count:380,rate:'100%',conv:100},{ name:'Conversion T2',count:269,rate:'71% CONV',conv:71},{ name:'Conversion T3',count:197,rate:'73% CONV',conv:73},{ name:'Conversion T4',count:147,rate:'75% CONV',conv:75},{ name:'Conversion T5',count:93, rate:'24% YIELD',conv:24}]},
-    }
-    window._annualYears = [2024, 2025, 2026]
-    currentYearIndex    = 2
-    refreshAnnual()
-}
-
-function renderYearSelector() {
-    const years = window._annualYears || []
-    const list  = document.getElementById('yearList')
-    if (!list) return
-    list.innerHTML = ''
-
-    const prevY = years[currentYearIndex - 1]
-    const currY = years[currentYearIndex]
-    const nextY = years[currentYearIndex + 1]
-
-    if (prevY) {
-        const el = document.createElement('span')
-        el.className = 'as-year-item'
-        el.textContent = prevY
-        el.onclick = () => { currentYearIndex--; refreshAnnual() }
-        list.appendChild(el)
-    }
-    const curr = document.createElement('span')
-    curr.className = 'as-year-item active'
-    curr.textContent = currY
-    list.appendChild(curr)
-
-    if (nextY) {
-        const el = document.createElement('span')
-        el.className = 'as-year-item'
-        el.textContent = nextY
-        el.onclick = () => { currentYearIndex++; refreshAnnual() }
-        list.appendChild(el)
-    }
-
-    document.getElementById('prevYearBtn').disabled = currentYearIndex === 0
-    document.getElementById('nextYearBtn').disabled = currentYearIndex === years.length - 1
-}
-
+// changeYear tetap ada untuk jaga-jaga kalau HTML masih pakai onclick
 function changeYear(dir) {
-    const years  = window._annualYears || []
-    const newIdx = currentYearIndex + dir
-    if (newIdx < 0 || newIdx >= years.length) return
-    currentYearIndex = newIdx
-    refreshAnnual()
+  const slider = document.getElementById('yearSlider');
+  if (!slider) return;
+  const n = Math.min(2, Math.max(0, parseInt(slider.value) + dir));
+  slider.value = n;
+  const yr = YEARS[n];
+  document.getElementById('year-display').textContent = yr;
+  updateAnnual(yr);
 }
 
-function updateStats(d) {
-    const el = id => document.getElementById(id)
-    if (el('as-total'))     el('as-total').textContent     = d.total
-    if (el('as-pct'))       el('as-pct').textContent       = d.pct || ''
-    if (el('as-retention')) el('as-retention').textContent = d.retention
-    if (el('as-success'))   el('as-success').textContent   = d.success
-    if (el('as-attrition')) el('as-attrition').textContent = d.attrition
-    if (el('as-yield'))     el('as-yield').textContent     = d.yield
+function updateAnnual(tahun) {
+  const rows = jsonData.funnel_data.filter(d => d.tahun === tahun); // ambil data berdasarkan tahun yg dipilih
+  if (!rows.length) return;
+
+  const totalP = rows.reduce((s, d) => s + d.prospek, 0);
+  const totalB = rows.reduce((s, d) => s + d.berkuliah, 0);
+  const ret    = Math.round((totalB / totalP) * 100); // rumus persentase retenttion rate
+
+  setText('as-total',     totalP);
+  setText('as-retention', ret + '%');
+  setText('as-success',   ret + '%');
+  setText('as-attrition', (100 - ret) + '%');
+
+  const prevRows = jsonData.funnel_data.filter(d => d.tahun === tahun - 1); // Ambil data tahun sebelumnya (untuk hitung persentase perubahan).
+  if (prevRows.length) {
+    const prevP = prevRows.reduce((s, d) => s + d.prospek, 0);
+    const pct   = Math.round(((totalP - prevP) / prevP) * 100);
+    setText('as-pct', (pct > 0 ? '+' : '') + pct + '%');
+  } else {
+    setText('as-pct', '-');
+  }
+
+  // hitung pipeline
+  const keys = ['web_visitor', 'ingin_mendaftar', 'lakukan_test', 'daftar_ulang', 'berkuliah'];
+  const totals = keys.map(k => rows.reduce((s, d) => s + d.detail_tahap[k], 0));
+  const yieldPct = Math.round((totals[4] / totals[0]) * 100);
+
+  setText('as-yield',    yieldPct + '%');
+  setText('as-s1-count', totals[0]);
+  setText('as-s1-rate',  '100%');
+  for (let i = 1; i <= 4; i++) { // loop untuk menghitung konversi tiap tahun
+    const conv = Math.round((totals[i] / totals[i - 1]) * 100);
+    setText('as-s' + (i + 1) + '-count', totals[i]);
+    setText('as-s' + (i + 1) + '-rate',  i < 4 ? conv + '% CONV' : yieldPct + '% YIELD');
+  }
 }
 
-function updatePipeline(d) {
-    d.stages.forEach((s, i) => {
-        const elC = document.getElementById(`as-s${i+1}-count`)
-        const elR = document.getElementById(`as-s${i+1}-rate`)
-        if (elC) elC.textContent = s.count
-        if (elR) elR.textContent = s.rate
-    })
+// ============================================================
+// HELPERS
+// ============================================================
+function setText(id, val) {
+  const el = document.getElementById(id);
+  if (el) el.textContent = val;
 }
 
-function updateTable(d) {
-    const tbody = document.getElementById('stageTableBody')
-    if (!tbody) return
-    tbody.innerHTML = ''
-    d.stages.forEach((s, i) => {
-        const status      = i === 0 ? 'blue' : s.conv >= 75 ? 'green' : s.conv >= 50 ? 'blue' : 'red'
-        const statusLabel = i === 0 ? 'Entry' : s.conv >= 75 ? 'Strong' : s.conv >= 50 ? 'Moderate' : 'Weak'
-        tbody.innerHTML += `
-          <tr>
-            <td><strong>${s.name}</strong></td>
-            <td><strong>${s.count}</strong> leads</td>
-            <td>${s.rate}</td>
-            <td>
-              <div class="as-progress-bar">
-                <div class="as-progress-fill" style="width:${s.conv}%"></div>
-              </div>
-            </td>
-            <td><span class="as-badge ${status}">${statusLabel}</span></td>
-          </tr>`
-    })
+function getTotalLeads(tahun) {
+  return jsonData.funnel_data
+    .filter(d => d.tahun === tahun)
+    .reduce((s, d) => s + d.prospek, 0);
 }
 
-function updateAnnualChart() {
-    const canvas = document.getElementById('annualChart')
-    if (!canvas) return
-    if (annualChartInstance) annualChartInstance.destroy()
-
-    const years   = window._annualYears || []
-    const success = years.map(y => annualDataFromDB[y]?.success_count || 0)
-    const failure = years.map(y => annualDataFromDB[y]?.failure_count || 0)
-
-    annualChartInstance = new Chart(canvas.getContext('2d'), {
-        type: 'bar',
-        data: {
-            labels: years.map(String),
-            datasets: [
-                { label: 'Failure', data: failure, backgroundColor: 'rgba(239,68,68,0.7)', borderColor: 'rgba(239,68,68,1)', borderWidth: 1, borderRadius: 6 },
-                { label: 'Success', data: success, backgroundColor: '#2b7de9', borderColor: '#2b7de9', borderWidth: 1, borderRadius: 6 }
-            ]
-        },
-        options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            plugins: {
-                legend: { display: false },
-                tooltip: { callbacks: { label: c => ` ${c.dataset.label}: ${c.parsed.y} leads` } }
-            },
-            scales: {
-                x: { grid: { display: false } },
-                y: { beginAtZero: true, grid: { color: 'rgba(0,0,0,0.05)' } }
-            }
-        }
-    })
+function getTotalBerkuliah(tahun) {
+  return jsonData.funnel_data
+    .filter(d => d.tahun === tahun)
+    .reduce((s, d) => s + d.berkuliah, 0);
 }
 
-function refreshAnnual() {
-    const years = window._annualYears || []
-    const year  = years[currentYearIndex]
-    const d     = annualDataFromDB[year]
-    if (!d) return
-    renderYearSelector()
-    updateStats(d)
-    updatePipeline(d)
-    updateTable(d)
-    updateAnnualChart()
-}
-
-if (document.getElementById('yearList')) loadAnnualStages()
+loadData();

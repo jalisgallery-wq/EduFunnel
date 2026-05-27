@@ -1,40 +1,72 @@
-const supabaseUrl = 'https://sciqhbmlhecpervewyld.supabase.co';
-const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNjaXFoYm1saGVjcGVydmV3eWxkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzcxMDQ3MDEsImV4cCI6MjA5MjY4MDcwMX0.7uLggDlAEiuZyU7pBX4DltH8iufWXEvUqcFVaK0907o';
+// login.js - Versi JSON (tanpa Supabase)
+// Autentikasi sederhana menggunakan data dummy lokal
 
-// Inisialisasi Supabase
-const _supabase = supabase.createClient(supabaseUrl, supabaseKey);
+const DUMMY_USERS = [
+  { email: "admin@edufunnel.com", password: "edufunnel123", name: "Admin Edufunnel" },
+  { email: "demo@edufunnel.com", password: "demo123", name: "Demo User" }
+];
 
-const loginForm = document.getElementById('loginForm');
+document.addEventListener("DOMContentLoaded", function () {
 
-loginForm.addEventListener('submit', async (e) => {
-    e.preventDefault();
+  // --- Password toggle ---
+  const toggleBtn = document.querySelector(".password-toggle");
+  const passwordInput = document.getElementById("password");
 
-    // Mengambil value berdasarkan ID yang ada di index.html
-    const email = document.getElementById('email').value; 
-    const password = document.getElementById('password').value;
+  if (toggleBtn && passwordInput) {
+    toggleBtn.addEventListener("click", function () {
+      const type = passwordInput.getAttribute("type") === "password" ? "text" : "password";
+      passwordInput.setAttribute("type", type);
+    });
+  }
 
-    try {
-        console.log("Mencoba login...");
+  // --- Form login ---
+  const loginForm = document.getElementById("loginForm");
 
-        const { data, error } = await _supabase.auth.signInWithPassword({
-            email: email,
-            password: password,
-        });
+  if (loginForm) {
+    loginForm.addEventListener("submit", function (e) {
+      e.preventDefault();
 
-        if (error) throw error;
+      const email    = document.getElementById("email").value.trim();
+      const password = document.getElementById("password").value;
 
-        if (data.user) {
-            // Mengarahkan ke dashboard.html (sesuaikan case-sensitive nama filenya)
-            window.location.replace("dashboard.html");
-        }
+      // Cek ke daftar user dummy
+      const user = DUMMY_USERS.find(u => u.email === email && u.password === password);
 
-    } catch (error) {
-        console.error("Gagal Login:", error.message);
-        
-        if (error.message === "Invalid login credentials") {
-            alert("Email atau password salah. Silakan coba lagi.");
-        } else {
-            alert("Terjadi kesalahan: " + error.message);
-        }
-    }
+      if (user) {
+        // Simpan session sederhana di sessionStorage
+        sessionStorage.setItem("loggedIn", "true");
+        sessionStorage.setItem("userName", user.name);
+        sessionStorage.setItem("userEmail", user.email);
+
+        // Redirect ke dashboard
+        window.location.href = "dashboard.html";
+      } else {
+        showError("Email atau password salah. Coba: admin@edufunnel.com / edufunnel123");
+      }
+    });
+  }
+
+  // --- Google login (disabled, tampilkan pesan) ---
+  const googleBtn = document.querySelector(".btn-google");
+  if (googleBtn) {
+    googleBtn.addEventListener("click", function () {
+      alert("Login Google tidak tersedia di versi JSON.\nGunakan email: admin@edufunnel.com\nPassword: edufunnel123");
+    });
+  }
+
 });
+
+// Fungsi tampilkan error di bawah form
+function showError(message) {
+  let errorEl = document.getElementById("login-error");
+
+  if (!errorEl) {
+    errorEl = document.createElement("p");
+    errorEl.id = "login-error";
+    errorEl.style.cssText = "color:#ef4444; font-size:14px; margin-top:12px; text-align:center;";
+    const form = document.getElementById("loginForm");
+    form.appendChild(errorEl);
+  }
+
+  errorEl.textContent = message;
+}

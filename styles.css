@@ -1409,3 +1409,26 @@ input {
       letter-spacing: 1px;
       text-transform: uppercase;
     }
+
+/* Year selector buttons - Annual Stages */
+.as-year-btn {
+  padding: 6px 18px;
+  border-radius: 6px;
+  border: 1px solid #D3D1C7;
+  background: transparent;
+  color: #888;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 500;
+  transition: all 0.15s;
+}
+
+.as-year-btn:hover {
+  background: #f1efea;
+}
+
+.as-year-btn.active {
+  background: #185FA5;
+  color: #fff;
+  border-color: #185FA5;
+}

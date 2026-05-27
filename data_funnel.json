@@ -1,0 +1,90 @@
+{
+  "metadata": {
+    "tim_pengembang": "syntetix",
+    "periode_data": "2024-2026",
+    "sumber_data_asli": "Data Spreadsheet Edufunnel"
+  },
+
+  "summary": {
+    "total_prospek": 380, 
+    "total_berkuliah": 93,
+    "rata_rata_probabilitas_konversi_persen": 24,
+    "rata_rata_probabilitas_attrition_persen": 76,
+    "sumber_terbaik_nama": "Instagram",
+    "sumber_terbaik_nilai_konversi_persen": 25
+  },
+
+  "metric_cards": {
+    "cards": [
+      { "id": "card-1", "title": "TOTAL LEADS", "value": 380 },
+      { "id": "card-2", "title": "RETENTION RATE", "value": "24%" },
+      { "id": "card-3", "title": "SUCCESS RATE", "value": "24%" },
+      { "id": "card-4", "title": "FAILURE RATE", "value": "76%" }
+    ]
+  },
+
+  "funnel_stages": [
+    { "key": "web_visitor", "label": "Web Visitor" },
+    { "key": "ingin_mendaftar", "label": "Ingin Mendaftar" },
+    { "key": "lakukan_test", "label": "Lakukan Test" },
+    { "key": "daftar_ulang", "label": "Daftar Ulang" },
+    { "key": "berkuliah", "label": "Berkuliah" }
+  ],
+
+  "funnel_data": [
+    {
+      "tahun": 2024,
+      "sumber_trafik": "Google Ads",
+      "prospek": 100,
+      "berkuliah": 30,
+      "konversi": 30,
+      "attrition": 70,
+      "detail_tahap": { "web_visitor": 100, "ingin_mendaftar": 80, "lakukan_test": 60, "daftar_ulang": 50, "berkuliah": 30 }
+    },
+    {
+      "tahun": 2024,
+      "sumber_trafik": "Instagram",
+      "prospek": 60,
+      "berkuliah": 20,
+      "konversi": 33,
+      "attrition": 67,
+      "detail_tahap": { "web_visitor": 60, "ingin_mendaftar": 40, "lakukan_test": 30, "daftar_ulang": 25, "berkuliah": 20 }
+    },
+    {
+      "tahun": 2025,
+      "sumber_trafik": "Google Ads",
+      "prospek": 120,
+      "berkuliah": 36,
+      "konversi": 30,
+      "attrition": 70,
+      "detail_tahap": { "web_visitor": 120, "ingin_mendaftar": 94, "lakukan_test": 76, "daftar_ulang": 55, "berkuliah": 36 }
+    },
+    {
+      "tahun": 2025,
+      "sumber_trafik": "Instagram",
+      "prospek": 80,
+      "berkuliah": 25,
+      "konversi": 31,
+      "attrition": 69,
+      "detail_tahap": { "web_visitor": 80, "ingin_mendaftar": 60, "lakukan_test": 40, "daftar_ulang": 37, "berkuliah": 25 }
+    },
+    {
+      "tahun": 2026,
+      "sumber_trafik": "Google Ads",
+      "prospek": 209,
+      "berkuliah": 50,
+      "konversi": 24,
+      "attrition": 76,
+      "detail_tahap": { "web_visitor": 209, "ingin_mendaftar": 165, "lakukan_test": 110, "daftar_ulang": 86, "berkuliah": 50 }
+    },
+    {
+      "tahun": 2026,
+      "sumber_trafik": "Instagram",
+      "prospek": 171,
+      "berkuliah": 43,
+      "konversi": 25,
+      "attrition": 75,
+      "detail_tahap": { "web_visitor": 171, "ingin_mendaftar": 104, "lakukan_test": 87, "daftar_ulang": 61, "berkuliah": 43 }
+    }
+  ]
+}

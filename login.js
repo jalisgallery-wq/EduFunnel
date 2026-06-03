@@ -41,7 +41,7 @@ document.addEventListener("DOMContentLoaded", function () {
         // Redirect ke dashboard
         window.location.href = "dashboard.html";
       } else {
-        showError("Email atau password salah. Coba: admin@edufunnel.com / edufunnel123");
+        showError("Email atau password salah.");
       }
     });
   }
